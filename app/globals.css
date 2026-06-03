@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 25% 97%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 354 100% 50%; /* Crimson Sunset HSL: #ff003c */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 93%;
+    --secondary-foreground: 224 71.4% 4.1%;
+    --muted: 220 15% 93%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 220 15% 93%;
+    --accent-foreground: 224 71.4% 4.1%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 354 100% 50%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 224 22% 8%; /* Premium Obsidian Black: #0d0f13 */
+    --foreground: 220 20% 98%;
+    --card: 224 20% 12%; /* Card Carbon: #131720 */
+    --card-foreground: 220 20% 98%;
+    --popover: 224 22% 8%;
+    --popover-foreground: 220 20% 98%;
+    --primary: 354 100% 52%; /* Crimson Energy HSL: #ff0a43 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 224 15% 18%; /* Charcoal Card: #212735 */
+    --secondary-foreground: 220 20% 98%;
+    --muted: 224 15% 18%;
+    --muted-foreground: 224 10% 65%;
+    --accent: 224 15% 18%;
+    --accent-foreground: 220 20% 98%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 224 15% 18%;
+    --input: 224 15% 18%;
+    --ring: 354 100% 52%;
+  }
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.light .glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
