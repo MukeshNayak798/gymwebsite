@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { dbGet, dbRun } from '@/lib/db';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -8,12 +8,12 @@ export async function PUT(_req: NextRequest, { params }: Params) {
     const { id: paymentId } = await params;
     const todayStr = new Date().toISOString().split('T')[0];
 
-    const paymentResult = await sql`SELECT * FROM payments WHERE id = ${paymentId}`;
-    if (paymentResult.rowCount === 0) {
+    const payment = await dbGet('SELECT * FROM payments WHERE id = ?', [paymentId]);
+    if (!payment) {
       return NextResponse.json({ error: 'Payment record not found.' }, { status: 404 });
     }
 
-    await sql`UPDATE payments SET payment_status = 'Paid', payment_date = ${todayStr} WHERE id = ${paymentId}`;
+    await dbRun(`UPDATE payments SET payment_status = 'Paid', payment_date = ? WHERE id = ?`, [todayStr, paymentId]);
 
     return NextResponse.json({ message: 'Payment recorded successfully' });
   } catch (error: unknown) {

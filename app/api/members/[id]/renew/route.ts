@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateStatusesAndOverdues } from '@/lib/db';
-import { sql } from '@vercel/postgres';
+import { dbGet, dbRun, updateStatusesAndOverdues } from '@/lib/db';
 
 function calculateExpiryDate(joinDateStr: string, planDuration: string): string {
   const parts = joinDateStr.split('-');
@@ -54,11 +53,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Plan duration and renewal date are required.' }, { status: 400 });
     }
 
-    const memberResult = await sql`SELECT * FROM members WHERE id = ${memberId}`;
-    if (memberResult.rowCount === 0) {
+    const member = await dbGet<Record<string, unknown>>('SELECT * FROM members WHERE id = ?', [memberId]);
+    if (!member) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
-    const member = memberResult.rows[0];
 
     const oldExpiryStr = member.expiry_date as string;
 
@@ -79,21 +77,24 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const newPlanType = plan_type || (member.plan_type as string) || 'Plan 1';
 
-    await sql`
-      UPDATE members SET plan_type=${newPlanType}, plan_duration=${plan_duration}, expiry_date=${newExpiryStr}, status=${newStatus} WHERE id=${memberId}
-    `;
+    await dbRun(
+      `UPDATE members SET plan_type=?, plan_duration=?, expiry_date=?, status=? WHERE id=?`,
+      [newPlanType, plan_duration, newExpiryStr, newStatus, memberId]
+    );
 
-    await sql`
-      INSERT INTO renewals (member_id, old_expiry_date, new_expiry_date, renewed_on) VALUES (${memberId}, ${oldExpiryStr}, ${newExpiryStr}, ${renewed_on})
-    `;
+    await dbRun(
+      `INSERT INTO renewals (member_id, old_expiry_date, new_expiry_date, renewed_on) VALUES (?, ?, ?, ?)`,
+      [memberId, oldExpiryStr, newExpiryStr, renewed_on]
+    );
 
     const amount = getPlanAmount(newPlanType, plan_duration);
     const paymentStatus = pay_now ? 'Paid' : 'Pending';
     const paymentDate = pay_now ? renewed_on : null;
 
-    await sql`
-      INSERT INTO payments (member_id, amount, payment_date, due_date, payment_status) VALUES (${memberId}, ${amount}, ${paymentDate}, ${renewed_on}, ${paymentStatus})
-    `;
+    await dbRun(
+      `INSERT INTO payments (member_id, amount, payment_date, due_date, payment_status) VALUES (?, ?, ?, ?, ?)`,
+      [memberId, amount, paymentDate, renewed_on, paymentStatus]
+    );
 
     return NextResponse.json({ message: 'Membership renewed successfully', new_expiry_date: newExpiryStr, status: newStatus });
   } catch (error: unknown) {
