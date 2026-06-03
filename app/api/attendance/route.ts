@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       } else {
         const existing = await sql`SELECT id FROM attendance WHERE member_id = ${member_id} AND attendance_date = ${date}`;
 
-        if (existing.rowCount > 0) {
+        if ((existing.rowCount ?? 0) > 0) {
           await sql`UPDATE attendance SET status = ${status} WHERE id = ${existing.rows[0].id}`;
         } else {
           await sql`INSERT INTO attendance (member_id, attendance_date, status) VALUES (${member_id}, ${date}, ${status})`;
