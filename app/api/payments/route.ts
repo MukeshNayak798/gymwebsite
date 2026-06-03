@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbAll, updateStatusesAndOverdues } from '@/lib/db';
+import { updateStatusesAndOverdues } from '@/lib/db';
+import { sql } from '@vercel/postgres';
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,20 +15,20 @@ export async function GET(request: NextRequest) {
       JOIN members m ON p.member_id = m.id
       WHERE 1=1
     `;
-    const params: unknown[] = [];
+    let params: unknown[] = [];
 
     if (status) {
-      query += ' AND p.payment_status = ?';
+      query += ` AND p.payment_status = $${params.length + 1}`;
       params.push(status);
     }
     if (search) {
-      query += ' AND m.name LIKE ?';
+      query += ` AND m.name ILIKE $${params.length + 1}`;
       params.push(`%${search}%`);
     }
 
     query += ' ORDER BY p.due_date DESC';
-    const payments = await dbAll(query, params);
-    return NextResponse.json(payments);
+    const payments = await sql.query(query, params);
+    return NextResponse.json(payments.rows);
   } catch (error: unknown) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }

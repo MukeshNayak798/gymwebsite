@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbAll, dbGet, dbRun, updateStatusesAndOverdues } from '@/lib/db';
+import { updateStatusesAndOverdues } from '@/lib/db';
+import { sql } from '@vercel/postgres';
 
 // GET: Attendance list for a specific date
 export async function GET(request: NextRequest) {
@@ -8,21 +9,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date') || new Date().toISOString().split('T')[0];
 
-    const attendanceRecords = await dbAll<{ member_id: number; status: string }>(
-      `SELECT member_id, status FROM attendance WHERE attendance_date = ?`,
-      [date]
-    );
-
-    const activeMembers = await dbAll<{ id: number; name: string; status: string; photo: string | null }>(
-      `SELECT id, name, status, photo FROM members WHERE status IN ('Active', 'Expiring Soon')`
-    );
+    const attendanceRecords = await sql`SELECT member_id, status FROM attendance WHERE attendance_date = ${date}`;
+    
+    const activeMembers = await sql`SELECT id, name, status, photo FROM members WHERE status IN ('Active', 'Expiring Soon')`;
 
     const recordsMap: Record<number, string> = {};
-    attendanceRecords.forEach((r) => {
+    attendanceRecords.rows.forEach((r) => {
       recordsMap[r.member_id] = r.status;
     });
 
-    const results = activeMembers.map((m) => ({
+    const results = activeMembers.rows.map((m) => ({
       member_id: m.id,
       name: m.name,
       status: m.status,
@@ -49,17 +45,14 @@ export async function POST(request: NextRequest) {
       const { member_id, status } = record;
 
       if (status === null || status === '') {
-        await dbRun(`DELETE FROM attendance WHERE member_id = ? AND attendance_date = ?`, [member_id, date]);
+        await sql`DELETE FROM attendance WHERE member_id = ${member_id} AND attendance_date = ${date}`;
       } else {
-        const existing = await dbGet<{ id: number } | undefined>(
-          `SELECT id FROM attendance WHERE member_id = ? AND attendance_date = ?`,
-          [member_id, date]
-        );
+        const existing = await sql`SELECT id FROM attendance WHERE member_id = ${member_id} AND attendance_date = ${date}`;
 
-        if (existing) {
-          await dbRun(`UPDATE attendance SET status = ? WHERE id = ?`, [status, existing.id]);
+        if (existing.rowCount > 0) {
+          await sql`UPDATE attendance SET status = ${status} WHERE id = ${existing.rows[0].id}`;
         } else {
-          await dbRun(`INSERT INTO attendance (member_id, attendance_date, status) VALUES (?, ?, ?)`, [member_id, date, status]);
+          await sql`INSERT INTO attendance (member_id, attendance_date, status) VALUES (${member_id}, ${date}, ${status})`;
         }
       }
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbGet, dbAll, dbRun, updateStatusesAndOverdues } from '@/lib/db';
+import { updateStatusesAndOverdues } from '@/lib/db';
+import { sql } from '@vercel/postgres';
 
 function calculateExpiryDate(joinDateStr: string, planDuration: string): string {
   const parts = joinDateStr.split('-');
@@ -28,21 +29,28 @@ export async function GET(_req: NextRequest, { params }: Params) {
   try {
     await updateStatusesAndOverdues();
     const { id: memberId } = await params;
-    const member = await dbGet('SELECT * FROM members WHERE id = ?', [memberId]);
+    const memberResult = await sql`SELECT * FROM members WHERE id = ${memberId}`;
 
-    if (!member) {
+    if (memberResult.rowCount === 0) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
+    const member = memberResult.rows[0];
 
-    const payments = await dbAll('SELECT * FROM payments WHERE member_id = ? ORDER BY due_date DESC', [memberId]);
-    const renewals = await dbAll('SELECT * FROM renewals WHERE member_id = ? ORDER BY renewed_on DESC', [memberId]);
-    const attendance = await dbAll('SELECT * FROM attendance WHERE member_id = ? ORDER BY attendance_date DESC', [memberId]);
+    const payments = await sql`SELECT * FROM payments WHERE member_id = ${memberId} ORDER BY due_date DESC`;
+    const renewals = await sql`SELECT * FROM renewals WHERE member_id = ${memberId} ORDER BY renewed_on DESC`;
+    const attendance = await sql`SELECT * FROM attendance WHERE member_id = ${memberId} ORDER BY attendance_date DESC`;
 
-    const totalDays = attendance.length;
-    const presentDays = (attendance as { status: string }[]).filter((a) => a.status === 'Present').length;
+    const totalDays = attendance.rows.length;
+    const presentDays = attendance.rows.filter((a) => a.status === 'Present').length;
     const attendancePercentage = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 100;
 
-    return NextResponse.json({ member, payments, renewals, attendance, attendancePercentage });
+    return NextResponse.json({ 
+      member, 
+      payments: payments.rows, 
+      renewals: renewals.rows, 
+      attendance: attendance.rows, 
+      attendancePercentage 
+    });
   } catch (error: unknown) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
@@ -55,10 +63,11 @@ export async function PUT(request: NextRequest, { params }: Params) {
     const { id: memberId } = await params;
     const body = await request.json();
 
-    const currentMember = await dbGet<Record<string, unknown>>('SELECT * FROM members WHERE id = ?', [memberId]);
-    if (!currentMember) {
+    const currentMemberResult = await sql`SELECT * FROM members WHERE id = ${memberId}`;
+    if (currentMemberResult.rowCount === 0) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
+    const currentMember = currentMemberResult.rows[0];
 
     const newName = body.name || currentMember.name;
     const newAge = body.age !== undefined ? body.age : currentMember.age;
@@ -96,10 +105,15 @@ export async function PUT(request: NextRequest, { params }: Params) {
     const cleanHeight = newHeight !== undefined && newHeight !== '' ? Number(newHeight) : null;
     const cleanWeight = newWeight !== undefined && newWeight !== '' ? Number(newWeight) : null;
 
-    await dbRun(
-      `UPDATE members SET name=?, age=?, gender=?, phone=?, address=?, height=?, weight=?, join_date=?, plan_type=?, plan_duration=?, expiry_date=?, status=?, photo=? WHERE id=?`,
-      [newName, cleanAge, newGender, newPhone, newAddress, cleanHeight, cleanWeight, newJoinDate, newPlanType || 'Plan 1', newPlanDuration, newExpiryDate, newStatus, newPhoto, memberId]
-    );
+    await sql`
+      UPDATE members SET 
+        name=${newName}, age=${cleanAge}, gender=${newGender}, phone=${newPhone}, 
+        address=${newAddress}, height=${cleanHeight}, weight=${cleanWeight}, 
+        join_date=${newJoinDate}, plan_type=${newPlanType || 'Plan 1'}, 
+        plan_duration=${newPlanDuration}, expiry_date=${newExpiryDate}, 
+        status=${newStatus}, photo=${newPhoto} 
+      WHERE id=${memberId}
+    `;
 
     return NextResponse.json({ message: 'Member updated successfully' });
   } catch (error: unknown) {
@@ -111,8 +125,8 @@ export async function PUT(request: NextRequest, { params }: Params) {
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id: memberId } = await params;
-    const result = await dbRun('DELETE FROM members WHERE id = ?', [memberId]);
-    if ((result as { changes: number }).changes === 0) {
+    const result = await sql`DELETE FROM members WHERE id = ${memberId}`;
+    if (result.rowCount === 0) {
       return NextResponse.json({ error: 'Member not found' }, { status: 404 });
     }
     return NextResponse.json({ message: 'Member deleted successfully' });

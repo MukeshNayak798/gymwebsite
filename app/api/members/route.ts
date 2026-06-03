@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbGet, dbAll, dbRun, updateStatusesAndOverdues } from '@/lib/db';
+import { updateStatusesAndOverdues } from '@/lib/db';
+import { sql } from '@vercel/postgres';
 
 function calculateExpiryDate(joinDateStr: string, planDuration: string): string {
   const parts = joinDateStr.split('-');
@@ -53,31 +54,31 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     let query = 'SELECT * FROM members WHERE 1=1';
-    const params: unknown[] = [];
+    let params: unknown[] = [];
 
     if (search) {
-      query += ' AND (name LIKE ? OR phone LIKE ?)';
+      query += ` AND (name ILIKE $${params.length + 1} OR phone ILIKE $${params.length + 2})`;
       params.push(`%${search}%`, `%${search}%`);
     }
     if (status) {
-      query += ' AND status = ?';
+      query += ` AND status = $${params.length + 1}`;
       params.push(status);
     }
 
     const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as count');
-    const countResult = await dbGet<{ count: number }>(countQuery, params);
+    const countResult = await sql.query(countQuery, params);
 
-    query += ' ORDER BY name ASC LIMIT ? OFFSET ?';
+    query += ` ORDER BY name ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
-    const members = await dbAll(query, params);
+    const members = await sql.query(query, params);
 
     return NextResponse.json({
-      members,
+      members: members.rows,
       pagination: {
-        total: countResult.count,
+        total: parseInt(countResult.rows[0].count),
         page,
         limit,
-        totalPages: Math.ceil(countResult.count / limit),
+        totalPages: Math.ceil(parseInt(countResult.rows[0].count) / limit),
       },
     });
   } catch (error: unknown) {
@@ -118,21 +119,21 @@ export async function POST(request: NextRequest) {
     const cleanWeight = weight !== undefined && weight !== '' ? Number(weight) : null;
     const cleanPlanType = plan_type || 'Plan 1';
 
-    const result = await dbRun(
-      `INSERT INTO members (name, age, gender, phone, address, height, weight, join_date, plan_type, plan_duration, expiry_date, status, photo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, cleanAge, gender || 'Male', phone || '', address || '', cleanHeight, cleanWeight, join_date, cleanPlanType, plan_duration, expiry_date, memberStatus, photo || null]
-    );
+    const result = await sql`
+      INSERT INTO members (name, age, gender, phone, address, height, weight, join_date, plan_type, plan_duration, expiry_date, status, photo)
+      VALUES (${name}, ${cleanAge}, ${gender || 'Male'}, ${phone || ''}, ${address || ''}, ${cleanHeight}, ${cleanWeight}, ${join_date}, ${cleanPlanType}, ${plan_duration}, ${expiry_date}, ${memberStatus}, ${photo || null})
+      RETURNING id
+    `;
 
-    const memberId = (result as { lastID: number }).lastID;
+    const memberId = result.rows[0].id;
     const amount = getPlanAmount(cleanPlanType, plan_duration);
     const paymentStatus = pay_now ? 'Paid' : 'Pending';
     const paymentDate = pay_now ? join_date : null;
 
-    await dbRun(
-      `INSERT INTO payments (member_id, amount, payment_date, due_date, payment_status) VALUES (?, ?, ?, ?, ?)`,
-      [memberId, amount, paymentDate, join_date, paymentStatus]
-    );
+    await sql`
+      INSERT INTO payments (member_id, amount, payment_date, due_date, payment_status)
+      VALUES (${memberId}, ${amount}, ${paymentDate}, ${join_date}, ${paymentStatus})
+    `;
 
     return NextResponse.json({ id: memberId, name, expiry_date, status: memberStatus }, { status: 201 });
   } catch (error: unknown) {
