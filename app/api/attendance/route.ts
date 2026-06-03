@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbAll, dbGet, dbRun, updateStatusesAndOverdues } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 // GET: Attendance list for a specific date
 export async function GET(request: NextRequest) {
   try {

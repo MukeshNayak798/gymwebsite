@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbAll, dbRun, updateStatusesAndOverdues } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 function calculateExpiryDate(joinDateStr: string, planDuration: string): string {
   const parts = joinDateStr.split('-');
   const year = parseInt(parts[0], 10);
